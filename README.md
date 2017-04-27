@@ -1,0 +1,2 @@
+# MafiaCalc
+Calculator for mafia
