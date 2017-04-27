@@ -1,0 +1,393 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+	<script type="text/javascript" src='https://code.jquery.com/jquery-3.2.1.min.js'></script>
+	<style type='text/css'>
+        .noselect {
+          -webkit-touch-callout: none;
+            -webkit-user-select: none;
+             -khtml-user-select: none;
+               -moz-user-select: none;
+                -ms-user-select: none;
+                 -o-user-select: none;
+                    user-select: none;
+        }
+		.player {
+			border-radius: 50%;
+			border: 1px solid black;
+			text-align: center;
+			vertical-align: middle;
+			font: x-large sans-serif;
+		}
+		.button {
+			border-radius: 50%;
+			border: 1px solid black;
+			text-align: center;
+			vertical-align: middle;
+			font: large sans-serif;
+			width: 50px;
+			height: 50px;
+			overflow: hidden;
+			position: static;
+			display: table-cell;
+		}
+		div.console {
+			overflow: auto;
+			position: fixed;
+			left: 70%;
+			top: 0;
+			right: 0;
+			bottom: 0;
+			background-color: #eee;
+		}
+		p.console {
+			font: small sans-serif;
+			text-align: left;
+			margin: 0px;
+			padding: 0px;
+		}
+		div.caption {
+			font: large sans-serif;
+			text-align: center;
+			overflow: hidden;
+		}
+		div.control {
+			position:absolute;
+			left:0;
+			top:0;
+			right:0;
+			bottom:85%;
+		}
+		div.table {
+			position:absolute;
+			left:0;
+			top:15%;
+			right:0;
+			bottom:0;
+		}
+		div.history {
+			position: absolute;
+			left: 0;
+			top: 15%;
+			right: 0;
+			bottom: 0;
+			display: none;
+			background: #8c4;
+		}
+		p.history {
+			font: small sans-serif;
+			text-align: left;
+			margin: 0px;
+			padding: 0px;
+		}
+		p.history_odd {
+			background-color: #7b3;
+		}
+		div.menu {
+			border: 1px solid black;
+			position: absolute;
+			left: 0;
+			top: 0;
+			bottom: 0;
+			width: 10%;
+			display: table-cell;
+			text-align: center;
+			vertical-align: middle;
+			font: large sans-serif;
+		}
+		div.submenu {
+			display: absolute;
+			left:0;
+			top:0;
+			display: none;
+			border: 1px solid black;
+		}
+		div.menuitem {
+			padding: 10%;
+			font: large sans-serif;
+			text-align: center;
+			background: 50% #ddd;
+		}
+	</style>
+</head>
+<body>
+	<div align='center' class='control'>
+		<div id='menu' class='menu' onmouseover="$('#submenu').css('display', 'block')">
+			<div id='submenu' class='submenu' onmouseout="$('#submenu').css('display', 'none')">
+				<div class='menuitem'>Vote</div>
+				<div class='menuitem'>History</div>
+				<div class='menuitem'>Debug</div>
+				<div class='menuitem'>Reset</div>
+			</div>
+			<div>Menu</div>
+		</div>
+		<div id='caption' class='caption'>Это МАФИЯ!</div>
+		<div id='vote' class='button'>Vote</div>
+	</div>
+	<div class='table'>
+		<table align='center' bgcolor='#8c4' cellspacing='25px' border='0' height='100%'>
+			<tr><td id='9'></td><td id='0'></td></tr>
+			<tr><td id='8'></td><td id='1'></td></tr>
+			<tr><td id='7'></td><td id='2'></td></tr>
+			<tr><td id='6'></td><td id='3'></td></tr>
+			<tr><td id='5'></td><td id='4'></td></tr>
+		</table>
+	</div>
+	<div id='history' class='history'></div>
+	<div id='console' class='console'></div>
+	<script type='text/javascript'>
+		log_line = 0
+		function log(text) {
+			var $p = $('<p></p>').addClass('console').text(text).appendTo('#console')
+			++log_line
+			if (log_line % 2 == 1)
+				$p.css('background-color', '#ddd')
+		}
+		
+		function caption(text) {
+			$('#caption').text(text)
+		}
+
+		//~ Votes
+
+		candidates = []
+		player_vote = []
+		n_votes = []
+		function vote(event) {
+			var day = event.data.day
+			log('Голосование!')
+			caption('Объявляется голосование!')
+			candidates[day] = []
+			candidates[day][0] = []
+			for(var i = 0; i < 10; ++i) {
+				$('#'+i).css('background', '#fff').off('click').click({'day': day, 'candidate': i}, function(event){
+					var day = event.data.day
+					var candidate = event.data.candidate
+					if (candidates[day][0].length != 0 && candidates[day][0][candidates[day][0].length-1] == candidate) {
+						candidates[day][0].pop()
+						$('#'+candidate).css('background-color', '#fff')
+						log('Игрок ' + (candidate+1) + ' снят с голосования')
+					} else {
+						for (var j = 0; j < candidates[day][0].length; ++j) {
+							if (candidates[day][0][j] != candidate)
+								continue
+							candidates[day][0].splice(j, 1)
+						}
+						candidates[day][0].push(candidate)
+						$('#'+candidate).css('background-color', '#fc9')
+						log('Выдвинут игрок ' + (candidate+1))
+					}
+					caption("Голосуем за игроков: " + vote_candidates(day, 0))
+				})
+			}
+			vote_start(day, 0)
+		}
+		function vote_start(day, round) {
+			$('#control').text('Start').off('click').click({'day': day, 'round': round}, function(event){
+				var day = event.data.day
+				var round = event.data.round
+				log('Голосуем за игроков: ' + vote_candidates(day, round))
+				n_votes = []
+				for (var i = 0; i < 10; ++i) {
+					player_vote[i] = -1
+				}
+				vote_candidate(day, round, 0)
+			})
+		}
+		function vote_candidate(day, round, order) {
+			if (candidates[day][round].length == order) {
+				vote_finish(day, round)
+				return
+			}
+			n_votes[order] = 0
+			caption('Кто голосует против игрока ' + (candidates[day][round][order]+1) + '?')
+			for (var j = 0; j < 10; ++j) {
+				if (player_vote[j] != -1)
+					$('#'+j).css('background-color', '#ddd').off('click')
+				else
+					$('#'+j).css('background-color', '#fff').off('click').click({'day': day, 'round': round, 'player': j, 'order': order}, function(event){
+						var day = event.data.day
+						var round = event.data.round
+						var player = event.data.player
+						var order = event.data.order
+						if (player_vote[player] == -1) {
+							player_vote[player] = candidates[day][round][order]
+							$('#'+player).css('background-color', '#ff8')
+							log('Игрок ' + (player+1) + ' голосует против игрока ' + (candidates[day][round][order]+1))
+							++n_votes[order]
+						} else {
+							player_vote[player] = -1
+							$('#'+player).css('background-color', '#fff')
+							log('Игрок ' + (player+1) + ' забирает свой голос')
+							--n_votes[order]
+						}
+					})
+			}
+			if (order == candidates[day][round].length-1) {
+				for (var j = 0; j < 10; ++j) {
+					if (player_vote[j] == -1) {
+						player_vote[j] = candidates[day][round][order]
+						$('#'+j).css('background-color', '#ff8')
+						log('Голос игрока ' + (j+1) + ' уходит против игрока ' + (candidates[day][round][order]+1))
+						++n_votes[order]
+					}
+				}
+				caption('Оставшиеся голоса уходят за кандидата ' + (candidates[day][round][order]+1) + ' (' + n_votes[order] + ' голос(-а,-ов))')
+				vote_result(day, round)
+				return
+			}
+			$('#control').text('Next').off('click').click({'day': day, 'round': round, 'order': order}, function(event){
+				vote_candidate(event.data.day, event.data.round, event.data.order+1)
+			})
+		}
+		function vote_candidates(day, round) {
+			var r = ''
+			if (candidates[day][round].length == 0) {
+				r += 'никто не выставлен'
+			} else {
+				r += (candidates[day][round][0]+1)
+				for (var j = 1; j < candidates[day][round].length; ++j) {
+					r += ' ' + (candidates[day][round][j]+1)
+				}
+			}
+			return r
+		}
+		function vote_result(day, round) {
+			$('#control').text('Results').off('click').click(function(){
+				for (var i = 0; i < 10; ++i) {
+					$('#'+i).css('background-color', '#fff').off('click')
+				}
+
+				var m = -1
+				for (var i = 0; i < candidates[day][round].length; ++i) {
+					if (m == -1 || m < n_votes[i])
+						m = n_votes[i]
+				}
+				
+				for (var i = 0; i < 10; ++i) {
+					var action = 'vote'
+					if (n_votes[player_vote[i]] == m)
+						action = 'kick'
+					player[i].history.push({'day': day, 'action': action, 'subject': player_vote[i]})
+					player[player_vote[i]].history.push({'day': day, 'action': action + 'ed', 'subject': i})
+				}
+				
+				candidates[day][round+1] = []
+				for (var i = 0; i < candidates[day][round].length; ++i) {
+					if (n_votes[i] == m) {
+						candidates[day][round+1].push(candidates[day][round][i])
+						$('#'+candidates[day][round][i]).css('background-color', 'pink')
+					}
+				}
+				if (candidates[day][round+1].length > 1) {
+					caption('Автокатастрофа между игроками ' + vote_candidates(day, round+1))
+					n_votes = []
+					vote_start(day, round+1)
+					return
+				}
+				caption('Лидер голосования - игрок ' + (candidates[day][round+1][0]+1))
+				vote_finish(day, round)
+			})
+		}
+		function vote_finish(day, round) {	
+			for (var i = 0; i < 10; ++i) {
+				$('#'+i).off('click')
+			}
+			$('#control').text('Finish').off('click').click(function(){
+				for (var i = 0; i < 10; ++i) {
+					$('#'+i).css('background-color', '#fff').off('click')
+				}
+				$('#control').text('Vote').off('click').click({'day': day+1}, vote)
+			})
+		}
+		
+		//~ history
+		
+		function show_history(player_id) {
+			$('#history').css('display', 'block').click(function(){
+				$('#history').css('display', 'none')
+			})
+			$('#history').html('')
+			$('<p></p>').addClass('history').text('История игрока ' + (player_id+1)).appendTo('#history')
+			for (var i = 0; i < player[player_id].history.length; ++i) {
+				var $p = $('<p></p>').addClass('history').appendTo('#history')
+				if (player[player_id].history[i].action == 'nominate')
+					$p.text('День #' + (player[player_id].history[i].day+1) + '. Выставил игрока ' + (player[player_id].history[i].subject+1) + '.')
+				else if (player[player_id].history[i].action == 'vote')
+					$p.text('День #' + (player[player_id].history[i].day+1) + '. Голосовал против игрока ' + (player[player_id].history[i].subject+1) + '.')
+				else if (player[player_id].history[i].action == 'kick')
+					$p.text('День #' + (player[player_id].history[i].day+1) + '. Вывел игрока ' + (player[player_id].history[i].subject+1) + '.')
+				else if (player[player_id].history[i].action == 'blame')
+					$p.text('День #' + (player[player_id].history[i].day+1) + '. Обвинял игрока ' + (player[player_id].history[i].subject+1) + '.')
+				else if (player[player_id].history[i].action == 'ask')
+					$p.text('День #' + (player[player_id].history[i].day+1) + '. Просил на проверку игрока ' + (player[player_id].history[i].subject+1) + '.')
+				else if (player[player_id].history[i].action == 'nominated')
+					$p.text('День #' + (player[player_id].history[i].day+1) + '. Его выставил игрок ' + (player[player_id].history[i].subject+1) + '.')
+				else if (player[player_id].history[i].action == 'voted')
+					$p.text('День #' + (player[player_id].history[i].day+1) + '. Против него голосовал игрок ' + (player[player_id].history[i].subject+1) + '.')
+				else if (player[player_id].history[i].action == 'kicked')
+					$p.text('День #' + (player[player_id].history[i].day+1) + '. Его вывел игрок ' + (player[player_id].history[i].subject+1) + '.')
+				else if (player[player_id].history[i].action == 'blamed')
+					$p.text('День #' + (player[player_id].history[i].day+1) + '. Его обвинял игрок ' + (player[player_id].history[i].subject+1) + '.')
+				else if (player[player_id].history[i].action == 'asked')
+					$p.text('День #' + (player[player_id].history[i].day+1) + '. Его просил на проверку игрок ' + (player[player_id].history[i].subject+1) + '.')
+				if (i % 2 == 1)
+					$p.addClass('history_odd')
+			}
+		}
+		
+		//~ day
+		
+		function speaker(day) {
+			$('#control').text('Next').off('click').click({'day': day}, function(event){
+				speaker(event.data.day)
+			}).off('dblclick').dblclick({'day': day}, vote)
+			for (var i = 0; i < 10; ++i) {
+				$('#'+i).off('click').css('font-weight', 'normal').css('background', '#fff')
+				if (player[i].dead) {
+					$('#'+i).css('background', '#ddd')
+				} else {
+					$('#'+i).click({'day': day, 'player': i}, function(event){
+						var pid = event.data.player
+						caption('Говорит игрок ' + (pid+1))
+						for (var i = 0; i < 10; ++i) {
+							$('#'+i).off('click')
+							if (i == pid) {
+								$('#'+i).css('font-weight', 'bold')
+							} else {
+							}
+						}
+					})
+				}
+			}
+		}
+		
+		function morning(day) {
+			for (var i = 0; i < 10; ++i) {
+				player[i].speach[day].about = []
+			}
+			speaker(day)
+		}
+		
+		history = []
+		for(var i = 0; i < 10; ++i) {
+			$('#'+i).text(i+1)
+			$('#'+i).addClass('player').addClass('noselect').css('background-color', '#fff')
+			$('#'+i).contextmenu({'player': i}, function(event){
+				show_history(event.data.player)
+				return false
+			})
+			player[i] = {'history': [], 'dead': false, 'speach': []}
+		}
+		for(var i = 0; i < 10; ++i) {
+			$('#'+i).width($('#'+i).height())
+		}
+		$('#control').text('Mafia').click(function(){
+			morning(0)
+		})
+		log('Мафия!')
+	</script>
+</body>
+</html>
