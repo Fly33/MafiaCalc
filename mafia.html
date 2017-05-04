@@ -3,7 +3,7 @@
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-	<script type="text/javascript" src='https://code.jquery.com/jquery-3.2.1.min.js'></script>
+	<script type="text/javascript" src='jquery-3.2.1.min.js'></script>
 	<style type='text/css'>
         .noselect {
           -webkit-touch-callout: none;
@@ -20,6 +20,7 @@
 			text-align: center;
 			vertical-align: middle;
 			font: x-large sans-serif;
+			overflow: hidden;
 		}
 		.button {
 			border-radius: 50%;
@@ -124,7 +125,7 @@
 			<div>Menu</div>
 		</div>
 		<div id='caption' class='caption'>Это МАФИЯ!</div>
-		<div id='vote' class='button'>Vote</div>
+		<div id='control' class='button'>Vote</div>
 	</div>
 	<div class='table'>
 		<table align='center' bgcolor='#8c4' cellspacing='25px' border='0' height='100%'>
@@ -340,24 +341,73 @@
 		
 		//~ day
 		
+		function set_self(pid) {
+			if (player[pid].sherif)
+				$('#'+pid).css('background', 'gold')
+			else
+				$('#'+pid).css('background', '#fff')		
+		}
+		
+		function set_opponent(pid, i) {
+			if (player[pid].about[i] == 'unknown') {
+				$('#'+i).css('background', '#fff').css('color', 'black').css('text-decoration', 'none')
+			} else if (player[pid].about[i] == 'play') {
+				$('#'+i).css('background', 'red').css('color', 'black').css('text-decoration', 'none')
+			} else if (player[pid].about[i] == 'blame') {
+				$('#'+i).css('background', 'black').css('color', 'white').css('text-decoration', 'none')
+			} else if (player[pid].about[i] == 'ask') {
+				$('#'+i).css('background', 'black').css('color', 'white').css('text-decoration', 'overline')
+			} else if (player[pid].about[i] == 'nominate') {
+				$('#'+i).css('background', 'black').css('color', 'white').css('text-decoration', 'underline')
+			}
+		}
+		
 		function speaker(day) {
+			caption('Выберите игрока')
 			$('#control').text('Next').off('click').click({'day': day}, function(event){
 				speaker(event.data.day)
 			}).off('dblclick').dblclick({'day': day}, vote)
 			for (var i = 0; i < 10; ++i) {
-				$('#'+i).off('click').css('font-weight', 'normal').css('background', '#fff')
+				$('#'+i).off('click').css('font-weight', 'normal').css('background', '#fff').css('color', '#000').css('text-decoration', 'none')
 				if (player[i].dead) {
 					$('#'+i).css('background', '#ddd')
 				} else {
 					$('#'+i).click({'day': day, 'player': i}, function(event){
 						var pid = event.data.player
 						caption('Говорит игрок ' + (pid+1))
-						for (var i = 0; i < 10; ++i) {
-							$('#'+i).off('click')
-							if (i == pid) {
-								$('#'+i).css('font-weight', 'bold')
+						set_self(pid)
+						$('#'+pid).css('font-weight', 'bold').off('click').click({'day': day, 'player': pid}, function(event){
+							var pid = event.data.player									
+							player[pid].sherif = !player[pid].sherif
+							if (player[pid].sherif) {
+								$('#'+pid).css('background', 'gold')
+								log('Игрок ' + (pid+1) + ' говорит, что он шериф.')
 							} else {
+								$('#'+pid).css('background', '#fff')
+								log('Игрок ' + (pid+1) + ' говорит, что он не шериф.')
 							}
+							set_self(pid)
+						})
+						for (var i = 0; i < 10; ++i) {
+							if (i == pid)
+								continue
+							set_opponent(pid, i)
+							$('#'+i).off('click').click({'day': day, 'player': pid, 'subject': i}, function(event){
+								var day = event.data.day
+								var pid = event.data.player
+								var i = event.data.subject
+								if (player[pid].about[i] == 'unknown')
+									player[pid].about[i] = 'play'
+								else if (player[pid].about[i] == 'play')
+									player[pid].about[i] = 'blame'
+								else if (player[pid].about[i] == 'blame')
+									player[pid].about[i] = 'ask'
+								else if (player[pid].about[i] == 'ask')
+									player[pid].about[i] = 'nominate'
+								else if (player[pid].about[i] == 'nominate')
+									player[pid].about[i] = 'unknown'
+								set_opponent(pid, i)
+							})
 						}
 					})
 				}
@@ -366,12 +416,14 @@
 		
 		function morning(day) {
 			for (var i = 0; i < 10; ++i) {
-				player[i].speach[day].about = []
+				player[i].speach[day] = {'sherif': 'inherit', 'about': []}
+				for (var j = 0; j < 10; ++j)
+					player[i].speach[day].about[j] = 'inherit'
 			}
 			speaker(day)
 		}
 		
-		history = []
+		player = []
 		for(var i = 0; i < 10; ++i) {
 			$('#'+i).text(i+1)
 			$('#'+i).addClass('player').addClass('noselect').css('background-color', '#fff')
@@ -379,7 +431,7 @@
 				show_history(event.data.player)
 				return false
 			})
-			player[i] = {'history': [], 'dead': false, 'speach': []}
+			player[i] = {'history': [], 'dead': false, 'speach': [], 'sherif': false, 'about': []}
 		}
 		for(var i = 0; i < 10; ++i) {
 			$('#'+i).width($('#'+i).height())
