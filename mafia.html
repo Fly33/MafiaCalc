@@ -145,6 +145,7 @@
 			++log_line
 			if (log_line % 2 == 1)
 				$p.css('background-color', '#ddd')
+			console.log(text)
 		}
 		
 		function caption(text) {
@@ -156,19 +157,17 @@
 		candidates = []
 		player_vote = []
 		n_votes = []
-		function vote(event) {
-			var day = event.data.day
+		function vote(day, cands) {
 			log('Голосование!')
-			caption('Объявляется голосование!')
 			candidates[day] = []
-			candidates[day][0] = []
+			candidates[day][0] = cands || []
+			caption('Голосование! Выставлены игроки: ' + vote_candidates(day, 0))
 			for(var i = 0; i < 10; ++i) {
-				$('#'+i).css('background', '#fff').off('click').click({'day': day, 'candidate': i}, function(event){
+				$('#'+i).off('click').click({'day': day, 'candidate': i}, function(event){
 					var day = event.data.day
 					var candidate = event.data.candidate
 					if (candidates[day][0].length != 0 && candidates[day][0][candidates[day][0].length-1] == candidate) {
 						candidates[day][0].pop()
-						$('#'+candidate).css('background-color', '#fff')
 						log('Игрок ' + (candidate+1) + ' снят с голосования')
 					} else {
 						for (var j = 0; j < candidates[day][0].length; ++j) {
@@ -177,10 +176,9 @@
 							candidates[day][0].splice(j, 1)
 						}
 						candidates[day][0].push(candidate)
-						$('#'+candidate).css('background-color', '#fc9')
 						log('Выдвинут игрок ' + (candidate+1))
 					}
-					caption("Голосуем за игроков: " + vote_candidates(day, 0))
+					caption("Выставлены игроки: " + vote_candidates(day, 0))
 				})
 			}
 			vote_start(day, 0)
@@ -228,7 +226,7 @@
 			}
 			if (order == candidates[day][round].length-1) {
 				for (var j = 0; j < 10; ++j) {
-					if (player_vote[j] == -1) {
+					if (player_vote[j] == -1 && !player[j].dead) {
 						player_vote[j] = candidates[day][round][order]
 						$('#'+j).css('background-color', '#ff8')
 						log('Голос игрока ' + (j+1) + ' уходит против игрока ' + (candidates[day][round][order]+1))
@@ -245,12 +243,14 @@
 		}
 		function vote_candidates(day, round) {
 			var r = ''
+			for(var i = 0; i < 10; ++i)
+				$('#'+i).css('background-color', '#fff')
 			if (candidates[day][round].length == 0) {
 				r += 'никто не выставлен'
 			} else {
-				r += (candidates[day][round][0]+1)
-				for (var j = 1; j < candidates[day][round].length; ++j) {
-					r += ' ' + (candidates[day][round][j]+1)
+				for (var j = 0; j < candidates[day][round].length; ++j) {
+					r += (candidates[day][round][j]+1) + ' '
+					$('#'+candidates[day][round][j]).css('background-color', 'brown')
 				}
 			}
 			return r
@@ -266,15 +266,7 @@
 					if (m == -1 || m < n_votes[i])
 						m = n_votes[i]
 				}
-				
-				for (var i = 0; i < 10; ++i) {
-					var action = 'vote'
-					if (n_votes[player_vote[i]] == m)
-						action = 'kick'
-					player[i].history.push({'day': day, 'action': action, 'subject': player_vote[i]})
-					player[player_vote[i]].history.push({'day': day, 'action': action + 'ed', 'subject': i})
-				}
-				
+								
 				candidates[day][round+1] = []
 				for (var i = 0; i < candidates[day][round].length; ++i) {
 					if (n_votes[i] == m) {
@@ -282,6 +274,15 @@
 						$('#'+candidates[day][round][i]).css('background-color', 'pink')
 					}
 				}
+
+				for (var i = 0; i < 10; ++i) {
+					var action = 'vote'
+					if (n_votes[player_vote[i]] == m && candidates[day][round+1].length == 1)
+						action = 'kick'
+					history(i, day, action, player_vote[i])
+					history(player_vote[i], day, passive(action), i)
+				}
+
 				if (candidates[day][round+1].length > 1) {
 					caption('Автокатастрофа между игроками ' + vote_candidates(day, round+1))
 					n_votes = []
@@ -289,6 +290,8 @@
 					return
 				}
 				caption('Лидер голосования - игрок ' + (candidates[day][round+1][0]+1))
+				player[candidates[day][round+1][0]].dead = true
+				//~ history(candidates[day][round+1][0], day, 'died')
 				vote_finish(day, round)
 			})
 		}
@@ -300,86 +303,188 @@
 				for (var i = 0; i < 10; ++i) {
 					$('#'+i).css('background-color', '#fff').off('click')
 				}
-				$('#control').text('Vote').off('click').click({'day': day+1}, vote)
+				night(day)
 			})
+		}
+		
+		//~ Night
+		function night(day) {
+			$('#control').text('Miss').off('click').click({'day': day}, function(event){
+				var day = event.data.day
+				log('Промах!')
+				morning(day+1)
+			})
+			for (var i = 0; i < 10; ++i) {
+				if (player[i].dead) {
+					$('#'+i).css('background-color', '#ddd').off('click').css('text-decoration', 'line-through')
+				} else {
+					$('#'+i).css('background-color', '#fff').off('click').click({'day': day, 'player': i}, function(event){
+						var day = event.data.day
+						var pid = event.data.player
+						log('Убит игрок ' + (pid+1) + '.')
+						player[pid].dead = true
+						history(pid, day, 'killed')
+						morning(day+1)
+					})
+				}
+			}
 		}
 		
 		//~ history
 		
-		function show_history(player_id) {
+		function passive(s) {
+			if (s[s.length-1] == 'e')
+				return s + 'd'
+			return s + 'ed'
+		}
+		
+		function history(pid, day, action, subject) {
+			player[pid].history.push({'day': day, 'action': action, 'subject': subject})
+		}
+		
+		function show_history(pid) {
 			$('#history').css('display', 'block').click(function(){
 				$('#history').css('display', 'none')
 			})
 			$('#history').html('')
-			$('<p></p>').addClass('history').text('История игрока ' + (player_id+1)).appendTo('#history')
-			for (var i = 0; i < player[player_id].history.length; ++i) {
-				var $p = $('<p></p>').addClass('history').appendTo('#history')
-				if (player[player_id].history[i].action == 'nominate')
-					$p.text('День #' + (player[player_id].history[i].day+1) + '. Выставил игрока ' + (player[player_id].history[i].subject+1) + '.')
-				else if (player[player_id].history[i].action == 'vote')
-					$p.text('День #' + (player[player_id].history[i].day+1) + '. Голосовал против игрока ' + (player[player_id].history[i].subject+1) + '.')
-				else if (player[player_id].history[i].action == 'kick')
-					$p.text('День #' + (player[player_id].history[i].day+1) + '. Вывел игрока ' + (player[player_id].history[i].subject+1) + '.')
-				else if (player[player_id].history[i].action == 'blame')
-					$p.text('День #' + (player[player_id].history[i].day+1) + '. Обвинял игрока ' + (player[player_id].history[i].subject+1) + '.')
-				else if (player[player_id].history[i].action == 'ask')
-					$p.text('День #' + (player[player_id].history[i].day+1) + '. Просил на проверку игрока ' + (player[player_id].history[i].subject+1) + '.')
-				else if (player[player_id].history[i].action == 'nominated')
-					$p.text('День #' + (player[player_id].history[i].day+1) + '. Его выставил игрок ' + (player[player_id].history[i].subject+1) + '.')
-				else if (player[player_id].history[i].action == 'voted')
-					$p.text('День #' + (player[player_id].history[i].day+1) + '. Против него голосовал игрок ' + (player[player_id].history[i].subject+1) + '.')
-				else if (player[player_id].history[i].action == 'kicked')
-					$p.text('День #' + (player[player_id].history[i].day+1) + '. Его вывел игрок ' + (player[player_id].history[i].subject+1) + '.')
-				else if (player[player_id].history[i].action == 'blamed')
-					$p.text('День #' + (player[player_id].history[i].day+1) + '. Его обвинял игрок ' + (player[player_id].history[i].subject+1) + '.')
-				else if (player[player_id].history[i].action == 'asked')
-					$p.text('День #' + (player[player_id].history[i].day+1) + '. Его просил на проверку игрок ' + (player[player_id].history[i].subject+1) + '.')
+			$('<p></p>').addClass('history').text('История игрока ' + (pid+1) + '. (' + player[pid].history.length + ' записей)').appendTo('#history')
+			for (var i = 0; i < player[pid].history.length; ++i) {
+				log(player[pid].history[i])
+				var $p = $('<p></p>').addClass('history')
+				switch(player[pid].history[i].action) {
+				case 'sherif':
+					$p.text('День #' + (player[pid].history[i].day+1) + '. Открылся шерифом.') 
+					break
+				case 'retired':
+					$p.text('День #' + (player[pid].history[i].day+1) + '. Отказался от шерифства.') 
+					break
+				case 'killed':
+					$p.text('День #' + (player[pid].history[i].day+1) + '. Убит ночью.') 
+					break
+				case 'unknown':
+					$p.text('День #' + (player[pid].history[i].day+1) + '. Не уверен в цвете игрока ' + (player[pid].history[i].subject+1) + '.')
+					break
+				case 'play':
+					$p.text('День #' + (player[pid].history[i].day+1) + '. Считает красным игрока ' + (player[pid].history[i].subject+1) + '.')
+					break
+				case 'nominate':
+					$p.text('День #' + (player[pid].history[i].day+1) + '. Выставил игрока ' + (player[pid].history[i].subject+1) + '.')
+					break
+				case 'vote':
+					$p.text('День #' + (player[pid].history[i].day+1) + '. Голосовал против игрока ' + (player[pid].history[i].subject+1) + '.')
+					break
+				case 'kick':
+					$p.text('День #' + (player[pid].history[i].day+1) + '. Вывел игрока ' + (player[pid].history[i].subject+1) + '.')
+					break
+				case 'blame':
+					$p.text('День #' + (player[pid].history[i].day+1) + '. Обвинял игрока ' + (player[pid].history[i].subject+1) + '.')
+					break
+				case 'ask':
+					$p.text('День #' + (player[pid].history[i].day+1) + '. Просил на проверку игрока ' + (player[pid].history[i].subject+1) + '.')
+					break
+				case 'played':
+					$p.text('День #' + (player[pid].history[i].day+1) + '. Считает красным игрока ' + (player[pid].history[i].subject+1) + '.')
+					break
+				case 'nominated':
+					$p.text('День #' + (player[pid].history[i].day+1) + '. Его выставил игрок ' + (player[pid].history[i].subject+1) + '.')
+					break
+				case 'voted':
+					$p.text('День #' + (player[pid].history[i].day+1) + '. Против него голосовал игрок ' + (player[pid].history[i].subject+1) + '.')
+					break
+				case 'kicked':
+					$p.text('День #' + (player[pid].history[i].day+1) + '. Его вывел игрок ' + (player[pid].history[i].subject+1) + '.')
+					break
+				case 'blamed':
+					$p.text('День #' + (player[pid].history[i].day+1) + '. Его обвинял игрок ' + (player[pid].history[i].subject+1) + '.')
+					break
+				case 'asked':
+					$p.text('День #' + (player[pid].history[i].day+1) + '. Его просил на проверку игрок ' + (player[pid].history[i].subject+1) + '.')
+					break
+				}
 				if (i % 2 == 1)
 					$p.addClass('history_odd')
+				$p.appendTo('#history')
 			}
 		}
 		
 		//~ day
 		
 		function set_self(pid) {
-			if (player[pid].sherif)
+			if (player[pid].sherif())
 				$('#'+pid).css('background', 'gold')
 			else
 				$('#'+pid).css('background', '#fff')		
 		}
 		
 		function set_opponent(pid, i) {
-			if (player[pid].about[i] == 'unknown') {
+			switch(player[pid].about(i)){
+			case 'unknown':
 				$('#'+i).css('background', '#fff').css('color', 'black').css('text-decoration', 'none')
-			} else if (player[pid].about[i] == 'play') {
+				break
+			case 'play':
 				$('#'+i).css('background', 'red').css('color', 'black').css('text-decoration', 'none')
-			} else if (player[pid].about[i] == 'blame') {
+				break
+			case 'blame':
 				$('#'+i).css('background', 'black').css('color', 'white').css('text-decoration', 'none')
-			} else if (player[pid].about[i] == 'ask') {
+				break
+			case 'ask':
 				$('#'+i).css('background', 'black').css('color', 'white').css('text-decoration', 'overline')
-			} else if (player[pid].about[i] == 'nominate') {
+				break
+			case 'nominate':
 				$('#'+i).css('background', 'black').css('color', 'white').css('text-decoration', 'underline')
+				break
 			}
+			if (player[pid].dead)
+				$('#'+i).css('text-decoration', 'line-through')
 		}
 		
 		function speaker(day) {
-			caption('Выберите игрока')
-			$('#control').text('Next').off('click').click({'day': day}, function(event){
+			caption('День ' + day + '. Выберите игрока')
+			$('#control').text('Finish').off('click').click({'day': day}, function(event){
+				var day = event.data.day
+				var cands = []
+				for(var i = 0; i < 10; ++i) {
+					if (player[i].speach[day].sherif != 'inherit') {
+						if (player[i].speach[day].sherif)
+							history(i, day, 'sherif')
+						else
+							history(i, day, 'retired')
+					}
+					for(var j = 0; j < 10; ++j) {
+						if (i == j)
+							continue
+						switch (player[i].speach[day].about[j]) {
+						case 'inherit':
+							continue
+						case 'nominate':
+							cands.push(j)
+						default:
+							history(j, day, passive(player[i].speach[day].about[j]), i)
+						case 'unknown':
+							history(i, day, player[i].speach[day].about[j], j)
+						}
+					}
+				}
+				vote(day, cands)
+			}).off('contextmenu').contextmenu({'day': day}, function(event){
 				speaker(event.data.day)
-			}).off('dblclick').dblclick({'day': day}, vote)
+			})
 			for (var i = 0; i < 10; ++i) {
 				$('#'+i).off('click').css('font-weight', 'normal').css('background', '#fff').css('color', '#000').css('text-decoration', 'none')
 				if (player[i].dead) {
-					$('#'+i).css('background', '#ddd')
+					$('#'+i).css('background', '#ddd').css('text-decoration', 'line-through')
 				} else {
 					$('#'+i).click({'day': day, 'player': i}, function(event){
 						var pid = event.data.player
 						caption('Говорит игрок ' + (pid+1))
+						$('#control').text('Next').off('click').click({'day': day}, function(event){
+							speaker(event.data.day)
+						})
 						set_self(pid)
 						$('#'+pid).css('font-weight', 'bold').off('click').click({'day': day, 'player': pid}, function(event){
 							var pid = event.data.player									
-							player[pid].sherif = !player[pid].sherif
-							if (player[pid].sherif) {
+							player[pid].speach[day].sherif = !player[pid].sherif()
+							if (player[pid].sherif()) {
 								$('#'+pid).css('background', 'gold')
 								log('Игрок ' + (pid+1) + ' говорит, что он шериф.')
 							} else {
@@ -396,16 +501,26 @@
 								var day = event.data.day
 								var pid = event.data.player
 								var i = event.data.subject
-								if (player[pid].about[i] == 'unknown')
-									player[pid].about[i] = 'play'
-								else if (player[pid].about[i] == 'play')
-									player[pid].about[i] = 'blame'
-								else if (player[pid].about[i] == 'blame')
-									player[pid].about[i] = 'ask'
-								else if (player[pid].about[i] == 'ask')
-									player[pid].about[i] = 'nominate'
-								else if (player[pid].about[i] == 'nominate')
-									player[pid].about[i] = 'unknown'
+								switch(player[pid].about(i)) {
+								case 'unknown':
+									player[pid].speach[day].about[i] = 'play'
+									break
+								case 'play':
+									player[pid].speach[day].about[i] = 'blame'
+									break
+								case 'blame':
+									if (player[i].dead)
+										player[pid].speach[day].about[i] = 'unknown'
+									else
+										player[pid].speach[day].about[i] = 'ask'
+									break
+								case 'ask':
+									player[pid].speach[day].about[i] = 'nominate'
+									break
+								case 'nominate':
+									player[pid].speach[day].about[i] = 'unknown'
+									break
+								}
 								set_opponent(pid, i)
 							})
 						}
@@ -416,6 +531,30 @@
 		
 		function morning(day) {
 			for (var i = 0; i < 10; ++i) {
+				player[i].sherif = (function(day){
+					function f() {
+						var d = day
+						while (d > 0 && this.speach[d].about[i] == 'inherit')
+							--d
+						//~ log('this.speach['+d+'/'+day+'].sherif = ' + this.speach[d].sherif)
+						if (this.speach[d].sherif == 'inherit')
+							return false
+						return this.speach[d].sherif
+					}
+					return f
+				})(day)
+				player[i].about = (function(day){
+					function f(i){
+						var d = day
+						while (d > 0 && this.speach[d].about[i] == 'inherit')
+							--d
+						//~ log('this.speach['+d+'/'+day+'].about['+i+'] = ' + this.speach[d].about[i])
+						if (this.speach[d].about[i] == 'inherit')
+							return 'unknown'
+						return this.speach[d].about[i]
+					}
+					return f
+				})(day)
 				player[i].speach[day] = {'sherif': 'inherit', 'about': []}
 				for (var j = 0; j < 10; ++j)
 					player[i].speach[day].about[j] = 'inherit'
@@ -431,7 +570,13 @@
 				show_history(event.data.player)
 				return false
 			})
-			player[i] = {'history': [], 'dead': false, 'speach': [], 'sherif': false, 'about': []}
+			player[i] = {
+				'history': [], 
+				'dead': false, 
+				'speach': [], 
+				'sherif': undefined, 
+				'about': undefined
+			}
 		}
 		for(var i = 0; i < 10; ++i) {
 			$('#'+i).width($('#'+i).height())
