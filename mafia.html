@@ -161,9 +161,12 @@
 			log('Голосование!')
 			candidates[day] = []
 			candidates[day][0] = cands || []
-			caption('Голосование! Выставлены игроки: ' + vote_candidates(day, 0))
+			caption('Выставлены: ' + vote_candidates(day, 0))
 			for(var i = 0; i < 10; ++i) {
-				$('#'+i).off('click').click({'day': day, 'candidate': i}, function(event){
+				$('#'+i).off('click')
+				if (player[i].dead)
+					continue
+				$('#'+i).click({'day': day, 'candidate': i}, function(event){
 					var day = event.data.day
 					var candidate = event.data.candidate
 					if (candidates[day][0].length != 0 && candidates[day][0][candidates[day][0].length-1] == candidate) {
@@ -178,7 +181,7 @@
 						candidates[day][0].push(candidate)
 						log('Выдвинут игрок ' + (candidate+1))
 					}
-					caption("Выставлены игроки: " + vote_candidates(day, 0))
+					caption("Выставлены: " + vote_candidates(day, 0))
 				})
 			}
 			vote_start(day, 0)
@@ -192,18 +195,42 @@
 				for (var i = 0; i < 10; ++i) {
 					player_vote[i] = -1
 				}
+				if (candidates[day][round].length == 0) {
+					caption('Никто не убит')
+					vote_finish(day, round)
+					return
+				} else if (day == 0 && candidates[day][round].length == 1) {
+					caption('Никто не убит')
+					log('В первый день одна кандидатура не голосуется')
+					vote_finish(day, round)
+					return
+				}
 				vote_candidate(day, round, 0)
 			})
 		}
 		function vote_candidate(day, round, order) {
-			if (candidates[day][round].length == order) {
-				vote_finish(day, round)
+			n_votes[order] = 0
+			if (candidates[day][round][order] != 'multi' && order == candidates[day][round].length-1) {
+				for (var j = 0; j < 10; ++j) {
+					if (player_vote[j] == -1 && !player[j].dead) {
+						player_vote[j] = candidates[day][round][order]
+						$('#'+j).css('background-color', '#ff8')
+						log('Голос игрока ' + (j+1) + ' уходит против игрока ' + (candidates[day][round][order]+1))
+						++n_votes[order]
+					}
+				}
+				caption('Оставшиеся голоса уходят за кандидата ' + (candidates[day][round][order]+1) + ' (' + n_votes[order] + ' голос(-а,-ов))')
+				vote_result(day, round)
 				return
 			}
-			n_votes[order] = 0
-			caption('Кто голосует против игрока ' + (candidates[day][round][order]+1) + '?')
+			if (candidates[day][round][order] != 'multi')
+				caption('Кто против игрока ' + (candidates[day][round][order]+1) + '?')
+			else
+				caption('Кто за подъём двоих?')
 			for (var j = 0; j < 10; ++j) {
-				if (player_vote[j] != -1)
+				if (player[j].dead)
+					$('#'+j).css('background-color', '#ddd').css('test-decoration', 'line-through').off('click')
+				else if (player_vote[j] != -1)
 					$('#'+j).css('background-color', '#ddd').off('click')
 				else
 					$('#'+j).css('background-color', '#fff').off('click').click({'day': day, 'round': round, 'player': j, 'order': order}, function(event){
@@ -224,29 +251,20 @@
 						}
 					})
 			}
-			if (order == candidates[day][round].length-1) {
-				for (var j = 0; j < 10; ++j) {
-					if (player_vote[j] == -1 && !player[j].dead) {
-						player_vote[j] = candidates[day][round][order]
-						$('#'+j).css('background-color', '#ff8')
-						log('Голос игрока ' + (j+1) + ' уходит против игрока ' + (candidates[day][round][order]+1))
-						++n_votes[order]
-					}
-				}
-				caption('Оставшиеся голоса уходят за кандидата ' + (candidates[day][round][order]+1) + ' (' + n_votes[order] + ' голос(-а,-ов))')
-				vote_result(day, round)
-				return
-			}
 			$('#control').text('Next').off('click').click({'day': day, 'round': round, 'order': order}, function(event){
 				vote_candidate(event.data.day, event.data.round, event.data.order+1)
 			})
 		}
 		function vote_candidates(day, round) {
 			var r = ''
-			for(var i = 0; i < 10; ++i)
-				$('#'+i).css('background-color', '#fff')
+			for(var i = 0; i < 10; ++i) {
+				if (player[i].dead)
+					$('#'+i).css('background-color', '#ddd').css('text-decoration', 'line-through')
+				else
+					$('#'+i).css('background-color', '#fff').css('text-decoration', 'none')
+			}
 			if (candidates[day][round].length == 0) {
-				r += 'никто не выставлен'
+				r += 'никто'
 			} else {
 				for (var j = 0; j < candidates[day][round].length; ++j) {
 					r += (candidates[day][round][j]+1) + ' '
@@ -276,6 +294,8 @@
 				}
 
 				for (var i = 0; i < 10; ++i) {
+					if (player_vote[i] == -1)
+						continue
 					var action = 'vote'
 					if (n_votes[player_vote[i]] == m && candidates[day][round+1].length == 1)
 						action = 'kick'
@@ -293,6 +313,7 @@
 				player[candidates[day][round+1][0]].dead = true
 				//~ history(candidates[day][round+1][0], day, 'died')
 				vote_finish(day, round)
+				speach(day+1, candidates[day][round+1][0])
 			})
 		}
 		function vote_finish(day, round) {	
@@ -309,22 +330,43 @@
 		
 		//~ Night
 		function night(day) {
+			caption('Ночь!')
 			$('#control').text('Miss').off('click').click({'day': day}, function(event){
 				var day = event.data.day
 				log('Промах!')
+				$('#control').off('contextmenu').contextmenu({'day': day}, function(event){
+					$('#control').off('contextmenu')
+					night(event.data.day)
+					return false
+				})
 				morning(day+1)
 			})
 			for (var i = 0; i < 10; ++i) {
+				$('#'+i).css('font-weight', 'normal').css('color', 'black').css('text-decoration', 'none').off('click')
 				if (player[i].dead) {
-					$('#'+i).css('background-color', '#ddd').off('click').css('text-decoration', 'line-through')
+					$('#'+i).css('background-color', '#ddd').css('text-decoration', 'line-through')
 				} else {
-					$('#'+i).css('background-color', '#fff').off('click').click({'day': day, 'player': i}, function(event){
+					$('#'+i).css('background-color', '#fff').click({'day': day, 'player': i}, function(event){
 						var day = event.data.day
 						var pid = event.data.player
 						log('Убит игрок ' + (pid+1) + '.')
 						player[pid].dead = true
 						history(pid, day, 'killed')
-						morning(day+1)
+						$('#control').off('contextmenu').contextmenu({'day': day, 'player': pid}, function(event){
+							var day = event.data.day
+							var pid = event.data.player
+							log('Игрок ' + (pid+1) + ' воскрес.')
+							player[pid].dead = false
+							player[pid].history.pop();
+							$('#control').off('contextmenu')
+							night(event.data.day)
+							return false
+						})
+						$('#control').text('R.I.P').off('click').click({'day': day}, function(event) {
+							var day = event.data.day
+							morning(day+1)
+						})
+						speach(day+1, pid)
 					})
 				}
 			}
@@ -345,6 +387,7 @@
 		function show_history(pid) {
 			$('#history').css('display', 'block').click(function(){
 				$('#history').css('display', 'none')
+				return false
 			})
 			$('#history').html('')
 			$('<p></p>').addClass('history').text('История игрока ' + (pid+1) + '. (' + player[pid].history.length + ' записей)').appendTo('#history')
@@ -434,40 +477,96 @@
 				$('#'+i).css('background', 'black').css('color', 'white').css('text-decoration', 'underline')
 				break
 			}
-			if (player[pid].dead)
+			if (player[i].dead)
 				$('#'+i).css('text-decoration', 'line-through')
 		}
 		
-		function speaker(day) {
+		function speach(day, pid) {
+			var sid = player[pid].speach.length;
+			player[pid].speach[sid] = {'day': day, 'sherif': 'inherit', 'about': []}
+			for (var i = 0; i < 10; ++i)
+				player[pid].speach[sid].about[i] = 'inherit'
+			set_self(pid)
+			$('#'+pid).css('font-weight', 'bold').off('click').click({'day': day, 'player': pid}, function(event){
+				var pid = event.data.player									
+				player[pid].speach[sid].sherif = !player[pid].sherif()
+				if (player[pid].sherif()) {
+					$('#'+pid).css('background', 'gold')
+					log('Игрок ' + (pid+1) + ' говорит, что он шериф.')
+				} else {
+					$('#'+pid).css('background', '#fff')
+					log('Игрок ' + (pid+1) + ' говорит, что он не шериф.')
+				}
+				set_self(pid)
+			})
+			for (var i = 0; i < 10; ++i) {
+				if (i == pid)
+					continue
+				set_opponent(pid, i)
+				$('#'+i).off('click').click({'day': day, 'player': pid, 'subject': i}, function(event){
+					var day = event.data.day
+					var pid = event.data.player
+					var i = event.data.subject
+					switch(player[pid].about(i)) {
+					case 'unknown':
+						player[pid].speach[sid].about[i] = 'play'
+						break
+					case 'play':
+						player[pid].speach[sid].about[i] = 'blame'
+						break
+					case 'blame':
+						if (player[i].dead)
+							player[pid].speach[sid].about[i] = 'unknown'
+						else
+							player[pid].speach[sid].about[i] = 'ask'
+						break
+					case 'ask':
+						player[pid].speach[sid].about[i] = 'nominate'
+						break
+					case 'nominate':
+						player[pid].speach[sid].about[i] = 'unknown'
+						break
+					default:
+						alert('Unknown player opinion')
+						break
+					}
+					set_opponent(pid, i)
+				})
+			}
+		}
+		
+		function morning(day) {
 			caption('День ' + day + '. Выберите игрока')
 			$('#control').text('Finish').off('click').click({'day': day}, function(event){
 				var day = event.data.day
 				var cands = []
 				for(var i = 0; i < 10; ++i) {
-					if (player[i].speach[day].sherif != 'inherit') {
-						if (player[i].speach[day].sherif)
-							history(i, day, 'sherif')
-						else
-							history(i, day, 'retired')
-					}
-					for(var j = 0; j < 10; ++j) {
-						if (i == j)
+					for (var sid = 0; sid < player[i].speach.length; ++sid) {
+						if (player[i].speach[sid] === undefined || player[i].speach[sid].day != day)
 							continue
-						switch (player[i].speach[day].about[j]) {
-						case 'inherit':
-							continue
-						case 'nominate':
-							cands.push(j)
-						default:
-							history(j, day, passive(player[i].speach[day].about[j]), i)
-						case 'unknown':
-							history(i, day, player[i].speach[day].about[j], j)
+						if (player[i].speach[sid].sherif != 'inherit') {
+							if (player[i].speach[sid].sherif)
+								history(i, day, 'sherif')
+							else
+								history(i, day, 'retired')
+						}
+						for(var j = 0; j < 10; ++j) {
+							if (i == j)
+								continue
+							switch (player[i].speach[sid].about[j]) {
+							case 'inherit':
+								continue
+							case 'nominate':
+								cands.push(j)
+							default:
+								history(j, day, passive(player[i].speach[sid].about[j]), i)
+							case 'unknown':
+								history(i, day, player[i].speach[sid].about[j], j)
+							}
 						}
 					}
 				}
 				vote(day, cands)
-			}).off('contextmenu').contextmenu({'day': day}, function(event){
-				speaker(event.data.day)
 			})
 			for (var i = 0; i < 10; ++i) {
 				$('#'+i).off('click').css('font-weight', 'normal').css('background', '#fff').css('color', '#000').css('text-decoration', 'none')
@@ -475,91 +574,16 @@
 					$('#'+i).css('background', '#ddd').css('text-decoration', 'line-through')
 				} else {
 					$('#'+i).click({'day': day, 'player': i}, function(event){
+						var day = event.data.day
 						var pid = event.data.player
 						caption('Говорит игрок ' + (pid+1))
 						$('#control').text('Next').off('click').click({'day': day}, function(event){
-							speaker(event.data.day)
+							morning(event.data.day)
 						})
-						set_self(pid)
-						$('#'+pid).css('font-weight', 'bold').off('click').click({'day': day, 'player': pid}, function(event){
-							var pid = event.data.player									
-							player[pid].speach[day].sherif = !player[pid].sherif()
-							if (player[pid].sherif()) {
-								$('#'+pid).css('background', 'gold')
-								log('Игрок ' + (pid+1) + ' говорит, что он шериф.')
-							} else {
-								$('#'+pid).css('background', '#fff')
-								log('Игрок ' + (pid+1) + ' говорит, что он не шериф.')
-							}
-							set_self(pid)
-						})
-						for (var i = 0; i < 10; ++i) {
-							if (i == pid)
-								continue
-							set_opponent(pid, i)
-							$('#'+i).off('click').click({'day': day, 'player': pid, 'subject': i}, function(event){
-								var day = event.data.day
-								var pid = event.data.player
-								var i = event.data.subject
-								switch(player[pid].about(i)) {
-								case 'unknown':
-									player[pid].speach[day].about[i] = 'play'
-									break
-								case 'play':
-									player[pid].speach[day].about[i] = 'blame'
-									break
-								case 'blame':
-									if (player[i].dead)
-										player[pid].speach[day].about[i] = 'unknown'
-									else
-										player[pid].speach[day].about[i] = 'ask'
-									break
-								case 'ask':
-									player[pid].speach[day].about[i] = 'nominate'
-									break
-								case 'nominate':
-									player[pid].speach[day].about[i] = 'unknown'
-									break
-								}
-								set_opponent(pid, i)
-							})
-						}
+						speach(day, pid)
 					})
 				}
 			}
-		}
-		
-		function morning(day) {
-			for (var i = 0; i < 10; ++i) {
-				player[i].sherif = (function(day){
-					function f() {
-						var d = day
-						while (d > 0 && this.speach[d].about[i] == 'inherit')
-							--d
-						//~ log('this.speach['+d+'/'+day+'].sherif = ' + this.speach[d].sherif)
-						if (this.speach[d].sherif == 'inherit')
-							return false
-						return this.speach[d].sherif
-					}
-					return f
-				})(day)
-				player[i].about = (function(day){
-					function f(i){
-						var d = day
-						while (d > 0 && this.speach[d].about[i] == 'inherit')
-							--d
-						//~ log('this.speach['+d+'/'+day+'].about['+i+'] = ' + this.speach[d].about[i])
-						if (this.speach[d].about[i] == 'inherit')
-							return 'unknown'
-						return this.speach[d].about[i]
-					}
-					return f
-				})(day)
-				player[i].speach[day] = {'sherif': 'inherit', 'about': []}
-				for (var j = 0; j < 10; ++j)
-					player[i].speach[day].about[j] = 'inherit'
-			}
-			speaker(day)
 		}
 		
 		player = []
@@ -574,8 +598,28 @@
 				'history': [], 
 				'dead': false, 
 				'speach': [], 
-				'sherif': undefined, 
-				'about': undefined
+				'sherif': function f() {
+					var result = false
+					for (var day = 0; day < this.speach.length; ++day) {
+						if (this.speach[day] === undefined)
+							continue
+						if (this.speach[day].sherif == 'inherit')
+							continue
+						result = this.speach[day].sherif
+					}
+					return result
+				}, 
+				'about': function f(i){
+					var result = 'unknown'
+					for (var day = 0; day < this.speach.length; ++day) {
+						if (this.speach[day] == undefined)
+							continue
+						if (this.speach[day].about[i] == 'inherit')
+							continue
+						result = this.speach[day].about[i]
+					}
+					return result
+				}
 			}
 		}
 		for(var i = 0; i < 10; ++i) {
