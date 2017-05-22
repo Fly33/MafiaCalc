@@ -42,6 +42,7 @@
 			right: 0;
 			bottom: 0;
 			background-color: #eee;
+			display: none;
 		}
 		p.console {
 			font: small sans-serif;
@@ -210,29 +211,17 @@
 		}
 		function vote_candidate(day, round, order) {
 			n_votes[order] = 0
-			if (candidates[day][round][order] != 'multi' && order == candidates[day][round].length-1) {
-				for (var j = 0; j < 10; ++j) {
-					if (player_vote[j] == -1 && !player[j].dead) {
-						player_vote[j] = candidates[day][round][order]
-						$('#'+j).css('background-color', '#ff8')
-						log('Голос игрока ' + (j+1) + ' уходит против игрока ' + (candidates[day][round][order]+1))
-						++n_votes[order]
-					}
-				}
-				caption('Оставшиеся голоса уходят за кандидата ' + (candidates[day][round][order]+1) + ' (' + n_votes[order] + ' голос(-а,-ов))')
-				vote_result(day, round)
-				return
-			}
-			if (candidates[day][round][order] != 'multi')
-				caption('Кто против игрока ' + (candidates[day][round][order]+1) + '?')
-			else
-				caption('Кто за подъём двоих?')
 			for (var j = 0; j < 10; ++j) {
 				if (player[j].dead)
 					$('#'+j).css('background-color', '#ddd').css('test-decoration', 'line-through').off('click')
 				else if (player_vote[j] != -1)
 					$('#'+j).css('background-color', '#ddd').off('click')
-				else
+				else if (typeof candidates[day][round][order] == 'number' && order == candidates[day][round].length-1) {
+					$('#'+j).css('background-color', '#ff8').off('click')
+					log('Голос игрока ' + (j+1) + ' уходит против игрока ' + (candidates[day][round][order]+1))
+					player_vote[j] = candidates[day][round][order]
+					++n_votes[order]
+				} else {
 					$('#'+j).css('background-color', '#fff').off('click').click({'day': day, 'round': round, 'player': j, 'order': order}, function(event){
 						var day = event.data.day
 						var round = event.data.round
@@ -250,7 +239,17 @@
 							--n_votes[order]
 						}
 					})
+				}
 			}
+			if (typeof candidates[day][round][order] != 'number')
+				caption('Кто за подъём двоих?')
+			else if (order == candidates[day][round].length-1) {
+				caption('Оставшиеся голоса уходят за кандидата ' + (candidates[day][round][order]+1) + ' (' + n_votes[order] + ' голос(-а,-ов))')
+				vote_result(day, round)
+				return
+			} else
+				caption('Кто против игрока ' + (candidates[day][round][order]+1) + '?')
+
 			$('#control').text('Next').off('click').click({'day': day, 'round': round, 'order': order}, function(event){
 				vote_candidate(event.data.day, event.data.round, event.data.order+1)
 			})
