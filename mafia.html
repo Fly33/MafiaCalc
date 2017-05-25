@@ -116,6 +116,7 @@
 </head>
 <body>
 	<div align='center' class='control'>
+<!--
 		<div id='menu' class='menu' onmouseover="$('#submenu').css('display', 'block')">
 			<div id='submenu' class='submenu' onmouseout="$('#submenu').css('display', 'none')">
 				<div class='menuitem'>Vote</div>
@@ -125,6 +126,7 @@
 			</div>
 			<div>Menu</div>
 		</div>
+-->
 		<div id='caption' class='caption'>Это МАФИЯ!</div>
 		<div id='control' class='button'>Vote</div>
 	</div>
@@ -565,6 +567,11 @@
 						}
 					}
 				}
+				$('control').off('contextmenu').contextmenu({'day': day}, function(event){
+					var day = event.data.day
+					$('control').off('contextmenu')
+					morning(day)
+				})
 				vote(day, cands)
 			})
 			for (var i = 0; i < 10; ++i) {
